@@ -6,8 +6,7 @@ widescreen race view. The Android work lives on the `android` branch; `main`
 is upstream dethrace.
 
 **No game files are included.** You need your own copy of Carmageddon (original
-CD, GOG or Steam). The build packs your game data into the APK, so **don't
-share the APK**: it contains copyrighted game files.
+CD, GOG or Steam).
 
 ## What you get
 
@@ -19,7 +18,23 @@ share the APK**: it contains copyrighted game files.
 - CD music, if your game folder has it as OGG files (see [Game files](#1-get-the-game-files))
 - Needs Android 7.0 or newer on a 64-bit (arm64) phone
 
-## Installing
+## Quick install (ready-made APK)
+
+1. Download the APK from the latest release on the
+   [Releases page](https://github.com/crumperxtc/dethrace-android/releases)
+   on your phone, tap it, and allow **install unknown apps** if asked. If Play
+   Protect warns about an unknown app, tap **More details > Install anyway**.
+2. Copy your Carmageddon folder (the one containing `DATA`, see
+   [Game files](#1-get-the-game-files)) to the phone, for example into
+   `Download`. A ZIP of the folder works too and is easier to copy as one file.
+3. Open the app, tap **Choose folder** (or **Choose ZIP**) and pick what you
+   copied. The app copies `DATA` and `MUSIC` into its own storage, which takes
+   a minute, and then starts the game. You can delete your copy afterwards.
+
+The ready-made APK contains no game files, so it's fine to share. That's all;
+the rest of this page is for building it yourself.
+
+## Building it yourself
 
 ### 1. Get the game files
 
@@ -89,16 +104,29 @@ slashes):
 sdk.dir=C:/Users/YOU/AppData/Local/Android/Sdk
 ```
 
-Then build, pointing `gameDir` at your Carmageddon folder from step 1:
+Then build. There are two kinds of APK:
 
-```
-cd dethrace\android
-gradlew.bat assembleDebug -PgameDir=C:\Games\Carmageddon
-```
+- **Without game data** (about 5 MB, shareable). The app asks for the game
+  folder on first launch, as in [Quick install](#quick-install-ready-made-apk):
+
+  ```
+  cd dethrace\android
+  gradlew.bat assembleDebug -PgameDir=
+  ```
+
+- **With your game data packed in** (about 320 MB, for your own phone only;
+  **don't share it**, it contains copyrighted game files). Point `gameDir` at
+  your Carmageddon folder from step 1:
+
+  ```
+  cd dethrace\android
+  gradlew.bat assembleDebug -PgameDir=C:\Games\Carmageddon
+  ```
 
 The first build downloads Gradle and takes a few minutes. The APK ends up in
-`android\app\build\outputs\apk\debug\app-debug.apk` (about 320 MB with the
-game data inside).
+`android\app\build\outputs\apk\debug\app-debug.apk`. When switching between
+the two kinds, delete that file first: Gradle updates it in place and otherwise
+keeps the old file size.
 
 ### 5. Install it on your phone
 
@@ -112,10 +140,11 @@ To update, install a newer APK over the old one. Saves and settings are kept.
 
 ### 6. First launch
 
-The screen stays **black for 10-30 seconds** the first time while the game
-data is unpacked to the phone's storage. Don't close the app during this. Later
-launches start straight away. Allow about 650 MB of free space (the APK plus
-the unpacked copy).
+With the data packed in, the screen stays **black for 10-30 seconds** the first
+time while the game data is unpacked to the phone's storage. Don't close the
+app during this. Later launches start straight away. Allow about 650 MB of free
+space (the APK plus the unpacked copy). Without packed data, you get the setup
+screen from [Quick install](#quick-install-ready-made-apk) instead.
 
 The unpacked files and your save games live in
 `Android/data/org.dethrace.carmageddon/files/`.
@@ -144,10 +173,12 @@ game's options, the on-screen buttons stop matching.
 
 ## Troubleshooting
 
-- **"Game data not found"**: the APK was built without game files (for
-  example with `-PgameDir=`). Either rebuild with `-PgameDir` pointing at your
-  game folder, or copy `DATA` and `MUSIC` into
-  `Android/data/org.dethrace.carmageddon/files/` with a PC.
+- **Setup screen says it can't find DATA/GENERAL.TXT**: pick the folder that
+  contains `DATA` (or `DATA` itself, or a ZIP with `DATA` inside). Picking the
+  folder above it also works.
+- **"Game data not found"** when the game starts: the imported files are
+  incomplete. Clear the app's storage in Android's app settings and import
+  again.
 - **"Couldn't unpack the game data"**: free up space on the phone and start
   the app again.
 - **Build fails with "No Carmageddon DATA folder"**: `-PgameDir` must point at
@@ -159,7 +190,8 @@ game's options, the on-screen buttons stop matching.
 
 - `app/jni/android_main.c`: Android entry point. Unpacks the bundled game data
   and starts dethrace with `-hires --widescreen=<width>`.
-- `app/src/main/java/org/dethrace/carmageddon/`: the touch overlay
+- `app/src/main/java/org/dethrace/carmageddon/`: `SetupActivity` (launcher;
+  imports game files when the APK has none) and the touch overlay
   (`CarmageddonActivity`, `TouchButton`, `SteeringPad`, `LookArea`, `Icons`).
 - Engine changes are marked as dethrace additions in `src/DETHRACE` and
   `src/harness`: widescreen rendering (`graphics.c`, `allsys.c`, `sdl2.c`) and
