@@ -8,6 +8,16 @@ is upstream dethrace.
 **No game files are included.** You need your own copy of Carmageddon (original
 CD, GOG or Steam).
 
+![A race in widescreen with the touch controls](docs/race.jpg)
+
+*A race on a 20:9 phone: the 3D view fills the width, the HUD stays in the
+middle, and the controls sit either side of it.*
+
+![The setup screen asking for the game files](docs/setup.jpg)
+
+*First launch of the ready-made APK: pick your Carmageddon folder or a ZIP of
+it.*
+
 ## What you get
 
 - The original game in 640x480 ("hires") mode
