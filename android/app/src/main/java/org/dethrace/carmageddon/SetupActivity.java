@@ -38,6 +38,9 @@ public class SetupActivity extends Activity {
     private static final int PICK_FOLDER = 1;
     private static final int PICK_ZIP = 2;
 
+    // In the Splat Pack folder once the base game's files have been merged in
+    private static final String BASE_MERGED_MARKER = "base-merged";
+
     private static final String[] GAME_IDS = { "carmageddon", "splatpack" };
     private static final String[] GAME_NAMES = { "Carmageddon", "Splat Pack" };
 
@@ -105,11 +108,86 @@ public class SetupActivity extends Activity {
         }
     }
 
+    /**
+     * Copies every file under src that dst doesn't have (names upper case,
+     * like imported data). Existing files, including the Splat Pack's own
+     * versions, are left alone; the base game's saves aren't copied.
+     */
+    private void mergeMissing(File src, File dst) throws IOException {
+        File[] children = src.listFiles();
+        if (children == null) {
+            return;
+        }
+        if (!dst.isDirectory() && !dst.mkdirs()) {
+            throw new IOException("can't create " + dst);
+        }
+        for (File child : children) {
+            String name = child.getName().toUpperCase(Locale.ROOT);
+            File target = new File(dst, name);
+            if (child.isDirectory()) {
+                if (!name.equals("SAVEGAME")) {
+                    mergeMissing(child, target);
+                }
+            } else if (!target.exists()) {
+                InputStream in = new java.io.FileInputStream(child);
+                try {
+                    writeFile(in, target);
+                } finally {
+                    in.close();
+                }
+            }
+        }
+    }
+
     private static boolean isSplatPack(File dataDir) {
         return new File(dataDir, "RACES/CASTLE.TXT").exists();
     }
 
-    private void play(String id) {
+    private void play(final String id) {
+        if (!id.equals("splatpack") || new File(gameDir(root, id), BASE_MERGED_MARKER).exists()) {
+            launch(id);
+            return;
+        }
+        // The Splat Pack is an expansion: its DATA only has new and changed
+        // files and installs over the base game. Do the same, once.
+        final File baseData = new File(gameDir(root, "carmageddon"), "DATA");
+        if (!new File(baseData, "GENERAL.TXT").exists()) {
+            status.setText(hasBundledData()
+                ? "The Splat Pack installs on top of Carmageddon. Play Carmageddon once first, then try again."
+                : "The Splat Pack installs on top of Carmageddon. Add Carmageddon's game files too, then try again.");
+            return;
+        }
+        setBusy(true, "Adding Carmageddon's files to the Splat Pack...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String error = null;
+                try {
+                    copied = 0;
+                    File splat = gameDir(root, id);
+                    mergeMissing(baseData, new File(splat, "DATA"));
+                    if (!new File(splat, BASE_MERGED_MARKER).createNewFile()) {
+                        throw new IOException("can't write marker");
+                    }
+                } catch (IOException e) {
+                    error = "Couldn't set up the Splat Pack: " + e.getMessage();
+                }
+                final String result = error;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (result == null) {
+                            launch(id);
+                        } else {
+                            setBusy(false, result);
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void launch(String id) {
         Intent intent = new Intent(this, CarmageddonActivity.class);
         intent.putExtra(EXTRA_GAME, id);
         startActivity(intent);

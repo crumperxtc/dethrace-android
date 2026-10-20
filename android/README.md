@@ -43,8 +43,9 @@ it.*
    You can delete your copy afterwards.
 4. Tap **Play Carmageddon** (or **Play Splat Pack**).
 
-Have both? Add each one the same way. They're kept separately, each with its
-own saves, and the start screen has a Play button for each.
+Have the Splat Pack too? Add it the same way. It's an expansion, so it needs
+Carmageddon added as well. Each game keeps its own saves, and the start screen
+has a Play button for each.
 
 The ready-made APK contains no game files, so it's fine to share. That's all;
 the rest of this page is for building it yourself.
@@ -70,7 +71,10 @@ carmageddon/
   has no music.
 - **Splat Pack:** same layout. Add it from the app's start screen; it's
   recognised by its races (`DATA/RACES/CASTLE.TXT`) and kept separately from
-  the base game. Builds with packed-in data only pack the base game.
+  the base game. It's an expansion, so **add the base game too**: the first
+  time you play the Splat Pack, the app copies in the base game files it
+  doesn't replace, like the PC installer did. Builds with packed-in data only
+  pack the base game.
 
 ### 2. Install the build tools (Windows)
 
