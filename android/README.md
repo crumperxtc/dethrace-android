@@ -10,8 +10,7 @@ CD, GOG or Steam).
 
 ![A race in widescreen with the touch controls](docs/race.jpg)
 
-*A race on a 20:9 phone: the 3D view fills the width, the HUD stays in the
-middle, and the controls sit either side of it.*
+*A race on a 20:9 phone
 
 ![The start screen with Play buttons for Carmageddon and the Splat Pack](docs/start.jpg)
 
