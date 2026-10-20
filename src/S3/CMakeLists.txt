@@ -7,8 +7,14 @@ target_include_directories(s3
 
 target_link_libraries(s3 PRIVATE brender harness compile_with_werror)
 
-if(NOT MSVC)
+if(ANDROID)
+    # pthreads live in bionic's libc; there is no libpthread
+    target_link_libraries(s3 PUBLIC m)
+endif()
+if(NOT MSVC AND NOT ANDROID)
     target_link_libraries(s3 PUBLIC pthread m)
+endif()
+if(NOT MSVC)
     add_compile_flags_if_supported(s3
         -Wstrict-prototypes
     )

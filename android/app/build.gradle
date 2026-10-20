@@ -1,0 +1,89 @@
+apply plugin: 'com.android.application'
+
+// SDL2 source checkout; its Java glue must match the native library version.
+def sdl2Dir = file(project.findProperty('sdl2Dir') ?: '../../../SDL2')
+
+// Carmageddon install (DATA, MUSIC) bundled as assets and unpacked on first launch.
+// Pass -PgameDir= (empty) to build without game data.
+def gameDirProp = project.findProperty('gameDir')
+def gameDir = gameDirProp == null ? file('../../../../dethrace/carmageddon') : (gameDirProp ? file(gameDirProp) : null)
+def gameAssetsDir = layout.buildDirectory.dir('gameAssets').get().asFile
+
+def prepareGameAssets = tasks.register('prepareGameAssets', Sync) {
+    from(gameDir) {
+        include 'DATA/**', 'MUSIC/**'
+        into 'game'
+    }
+    into gameAssetsDir
+    doLast {
+        // SDL can't list asset directories, so ship an index of every file
+        def root = new File(gameAssetsDir, 'game')
+        def lines = []
+        root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            lines << "${root.toPath().relativize(f.toPath()).toString().replace('\\', '/')}\t${f.length()}"
+        }
+        new File(gameAssetsDir, 'game/filelist.txt').text = lines.sort().join('\n') + '\n'
+    }
+}
+
+android {
+    namespace "org.libsdl.app"
+    compileSdk 35
+    ndkVersion "29.0.14206865"
+
+    defaultConfig {
+        applicationId "org.dethrace.carmageddon"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+        externalNativeBuild {
+            cmake {
+                arguments "-DDETHRACE_ANDROID_SDL2_DIR=${sdl2Dir.absolutePath.replace('\\', '/')}",
+                          "-DDETHRACE_NET_ENABLED=OFF",
+                          // Optimised native code even in debug builds; the game is too slow without it
+                          "-DCMAKE_BUILD_TYPE=Release"
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Personal sideload build: sign with the debug key
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    sourceSets.main {
+        java.srcDirs = ["${sdl2Dir}/android-project/app/src/main/java", "src/main/java"]
+        if (gameDir != null) {
+            assets.srcDirs += gameAssetsDir
+        }
+    }
+
+    androidResources {
+        // Store game data uncompressed: faster to unpack, and the music is already OGG
+        noCompress += ''
+    }
+
+    externalNativeBuild {
+        cmake {
+            path '../../CMakeLists.txt'
+            version '3.31.6'
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+if (gameDir != null) {
+    if (!new File(gameDir, 'DATA/GENERAL.TXT').exists()) {
+        throw new GradleException("No Carmageddon DATA folder in ${gameDir}; pass -PgameDir=<path> or -PgameDir= to skip")
+    }
+    tasks.named('preBuild') { dependsOn prepareGameAssets }
+}

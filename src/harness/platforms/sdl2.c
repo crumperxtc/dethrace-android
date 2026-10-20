@@ -19,6 +19,11 @@ static SDL_GLContext* gl_context;
 
 static int render_width, render_height;
 
+// Widescreen: the texture is wider than the game's 640x480 screen, which is
+// shown centred; content_offset_x is the width of each side bar
+static int texture_width;
+static int content_offset_x;
+
 static Uint32 last_frame_time;
 
 static void (*gKeyHandler_func)(void);
@@ -215,8 +220,13 @@ static int SDL2_Harness_GetMousePosition(int* pX, int* pY) {
         lX = *pX * (640.0f / window_width);
         lY = *pY * (480.0f / window_height);
     }
-    *pX = (int)lX;
+    *pX = (int)lX - content_offset_x;
     *pY = (int)lY;
+    if (*pX < 0) {
+        *pX = 0;
+    } else if (content_offset_x && *pX >= render_width - 2 * content_offset_x) {
+        *pX = render_width - 2 * content_offset_x - 1;
+    }
     return 0;
 }
 
@@ -244,6 +254,13 @@ static int SDL2_Harness_ShowErrorMessage(char* title, char* message) {
 static void SDL2_Harness_CreateWindow(const char* title, int width, int height, tHarness_window_type window_type) {
     int window_width, window_height;
     Uint32 extra_window_flags;
+
+    content_offset_x = 0;
+    if (window_type == eWindow_type_software && height == 480 && harness_game_config.widescreen_width > width) {
+        content_offset_x = (harness_game_config.widescreen_width - width) / 2;
+        width = harness_game_config.widescreen_width;
+    }
+    texture_width = width;
 
     render_width = width;
     render_height = height;
@@ -345,10 +362,29 @@ static void SDL2_Harness_Swap(br_pixelmap* back_buffer) {
         src_pixels = back_buffer->pixels;
 
         SDL2_LockTexture(screen_texture, NULL, (void**)&dest_pixels, &dest_pitch);
-        for (i = 0; i < back_buffer->height * back_buffer->width; i++) {
-            *dest_pixels = converted_palette[*src_pixels];
-            dest_pixels++;
-            src_pixels++;
+        if (back_buffer->width == texture_width) {
+            for (i = 0; i < back_buffer->height * back_buffer->width; i++) {
+                *dest_pixels = converted_palette[*src_pixels];
+                dest_pixels++;
+                src_pixels++;
+            }
+        } else {
+            // Narrower than the widescreen texture: centre it between black bars
+            int x, y;
+            int offset = (texture_width - back_buffer->width) / 2;
+            for (y = 0; y < back_buffer->height; y++) {
+                br_uint_32* row = (br_uint_32*)((uint8_t*)dest_pixels + y * dest_pitch);
+                uint8_t* src_row = src_pixels + y * back_buffer->row_bytes;
+                for (x = 0; x < offset; x++) {
+                    row[x] = 0xff000000;
+                }
+                for (x = 0; x < back_buffer->width; x++) {
+                    row[offset + x] = converted_palette[src_row[x]];
+                }
+                for (x = offset + back_buffer->width; x < texture_width; x++) {
+                    row[x] = 0xff000000;
+                }
+            }
         }
         SDL2_UnlockTexture(screen_texture);
         SDL2_RenderClear(renderer);

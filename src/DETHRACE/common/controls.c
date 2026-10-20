@@ -2037,6 +2037,49 @@ void PollCarControls(tU32 pTime_difference) {
     }
 }
 
+#ifdef __ANDROID__
+// Touch-drag camera control (android/app/jni/android_main.c). Written from the
+// Android UI thread and consumed by the game loop, hence the atomics.
+static int gAndroid_camera_yaw_millideg;
+static int gAndroid_camera_zoom_milli;
+static int gAndroid_camera_reset;
+
+void Android_AddCameraDrag(float pYaw_degrees, float pZoom) {
+    if (!gProgram_state.racing) {
+        return;
+    }
+    __atomic_add_fetch(&gAndroid_camera_yaw_millideg, (int)(pYaw_degrees * 1000.f), __ATOMIC_RELAXED);
+    __atomic_add_fetch(&gAndroid_camera_zoom_milli, (int)(pZoom * 1000.f), __ATOMIC_RELAXED);
+}
+
+void Android_ResetCamera(void) {
+    if (gProgram_state.racing) {
+        __atomic_store_n(&gAndroid_camera_reset, 1, __ATOMIC_RELAXED);
+    }
+}
+
+static void Android_ApplyCameraDrag(void) {
+    float yaw = __atomic_exchange_n(&gAndroid_camera_yaw_millideg, 0, __ATOMIC_RELAXED) / 1000.f;
+    float zoom = __atomic_exchange_n(&gAndroid_camera_zoom_milli, 0, __ATOMIC_RELAXED) / 1000.f;
+
+    if (__atomic_exchange_n(&gAndroid_camera_reset, 0, __ATOMIC_RELAXED)) {
+        gCamera_yaw = 0;
+        return;
+    }
+    // Same direction as the "move right" key
+    if (gCamera_sign) {
+        yaw = -yaw;
+    }
+    gCamera_yaw += BrDegreeToAngle(yaw);
+    gCamera_zoom += zoom;
+    if (gCamera_zoom > 2.0f) {
+        gCamera_zoom = 2.0f;
+    } else if (gCamera_zoom < 0.1f) {
+        gCamera_zoom = 0.1f;
+    }
+}
+#endif
+
 // IDA: void __usercall PollCameraControls(tU32 pTime_difference@<EAX>)
 // FUNCTION: CARM95 0x004a4214
 void PollCameraControls(tU32 pTime_difference) {
@@ -2109,6 +2152,9 @@ void PollCameraControls(tU32 pTime_difference) {
         } else if (!flag) {
             gCamera_reset = 0;
         }
+#ifdef __ANDROID__
+        Android_ApplyCameraDrag();
+#endif
     }
 }
 

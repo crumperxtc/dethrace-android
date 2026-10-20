@@ -73,6 +73,8 @@ extern br_pixelmap* gFlic_palette;
 extern tDR_font gFonts[21];
 extern char* gCurrent_palette_pixels;
 extern int gWidth;
+extern br_pixelmap* gWide_render_screen;
+extern int gWide_frame_ready;
 extern int gMap_render_height_i;
 extern int gScreen_wobble_x;
 extern int gScreen_wobble_y;

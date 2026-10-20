@@ -547,7 +547,23 @@ br_pixelmap* PDInterfacePixelmap(void) {
 // IDA: void __cdecl SwapBackScreen()
 void SwapBackScreen(void) {
     PDUnlockRealBackScreen(1);
-    BrPixelmapDoubleBuffer(gScreen, gReal_back_screen);
+    if (gWide_frame_ready) {
+        // dethrace: widescreen race frame. Put the finished 640x480 frame (3D centre
+        // plus HUD) in the middle of the wide 3D render and present that instead.
+        gWide_frame_ready = 0;
+        BrPixelmapRectangleCopy(
+            gWide_render_screen,
+            (gWide_render_screen->width - gReal_back_screen->width) / 2 - gWide_render_screen->origin_x,
+            -gWide_render_screen->origin_y,
+            gReal_back_screen,
+            -gReal_back_screen->origin_x,
+            -gReal_back_screen->origin_y,
+            gReal_back_screen->width,
+            gReal_back_screen->height);
+        gHarness_platform.Swap(gWide_render_screen);
+    } else {
+        BrPixelmapDoubleBuffer(gScreen, gReal_back_screen);
+    }
     PDLockRealBackScreen(1);
 }
 

@@ -387,6 +387,12 @@ int Harness_ProcessCommandLine(int* argc, char* argv[]) {
             harness_game_config.fps = atoi(s + 1);
             LOG_INFO2("FPS limiter set to %f", harness_game_config.fps);
             consumed = 1;
+        } else if (strstr(argv[i], "--widescreen=") != NULL) {
+            char* s = strstr(argv[i], "=");
+            // keep rows a whole number of 32-bit words
+            harness_game_config.widescreen_width = atoi(s + 1) & ~7;
+            LOG_INFO2("Widescreen width set to %d", harness_game_config.widescreen_width);
+            consumed = 1;
         } else if (strcasecmp(argv[i], "--freeze-timer") == 0) {
             LOG_INFO("Timer frozen");
             harness_game_config.freeze_timer = 1;

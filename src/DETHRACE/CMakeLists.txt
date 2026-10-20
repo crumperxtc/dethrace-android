@@ -16,6 +16,12 @@ if(MSVC_42_FOR_RECCMP)
 
     reccmp_add_target(dethrace ID CARM95)
     reccmp_configure()
+elseif(ANDROID)
+    # SDLActivity loads the game as libmain.so and calls SDL_main
+    add_library(dethrace SHARED ${CMAKE_SOURCE_DIR}/android/app/jni/android_main.c)
+    set_target_properties(dethrace PROPERTIES OUTPUT_NAME "main")
+    set_source_files_properties(main.c PROPERTIES COMPILE_DEFINITIONS "main=dethrace_main")
+    target_link_libraries(dethrace PRIVATE SDL2::SDL2 log)
 else()
     add_executable(dethrace
         WIN32

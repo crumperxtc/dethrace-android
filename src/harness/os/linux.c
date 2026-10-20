@@ -1,7 +1,8 @@
 // Based on https://gist.github.com/jvranish/4441299
 
-#ifdef __TINYC__
+#if defined(__TINYC__) || defined(__ANDROID__)
 /* tcc does potentially not have __int128_t, used in /usr/include/bits/link.h:99 */
+/* Android's bionic has no execinfo.h before API 33 */
 #define SUPPORT_TRACEBACK 0
 #else
 #define SUPPORT_TRACEBACK 1

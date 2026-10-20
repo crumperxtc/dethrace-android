@@ -13,6 +13,7 @@
 #include "globvrbm.h"
 #include "globvrpb.h"
 #include "grafdata.h"
+#include "harness/config.h"
 #include "harness/hooks.h"
 #include "harness/os.h"
 #include "harness/trace.h"
@@ -376,6 +377,12 @@ char* gCurrent_palette_pixels;
 
 // GLOBAL: CARM95 0x0054b320
 int gWidth;
+
+// dethrace: hor+ widescreen. Races render the 3D view into this wider buffer;
+// its centre becomes the normal 640x480 frame and SwapBackScreen shows the sides.
+br_pixelmap* gWide_render_screen;
+static br_pixelmap* gWide_depth_buffer;
+int gWide_frame_ready;
 
 // GLOBAL: CARM95 0x0054ff18
 int gMap_render_height_i;
@@ -819,6 +826,23 @@ void SetBRenderScreenAndBuffers(int pX_offset, int pY_offset, int pWidth, int pH
     gDepth_buffer = BrPixelmapMatch(gBack_screen, BR_PMMATCH_DEPTH_16);
     if (gDepth_buffer == NULL) {
         FatalError(kFatalError_AllocateZBuffer);
+    }
+
+    // dethrace: widescreen render target (software renderer, 640x480 only)
+    if (gWide_render_screen == NULL
+        && harness_game_config.widescreen_width > gBack_screen->width
+        && gBack_screen->height == 480
+        && gBack_screen->type == BR_PMT_INDEX_8) {
+        gWide_render_screen = BrPixelmapAllocate(BR_PMT_INDEX_8, harness_game_config.widescreen_width, gBack_screen->height, NULL, 0);
+        gWide_render_screen->origin_x = 0;
+        gWide_render_screen->origin_y = 0;
+        gWide_depth_buffer = BrPixelmapMatch(gWide_render_screen, BR_PMMATCH_DEPTH_16);
+        if (gWide_depth_buffer == NULL) {
+            FatalError(kFatalError_AllocateZBuffer);
+        }
+        // Same as a full screen gRender_screen: projection centred
+        gWide_render_screen->origin_x = gWide_render_screen->width / 2;
+        gWide_render_screen->origin_y = gWide_render_screen->height / 2;
     }
 
     BrZbBegin(gRender_screen->type, gDepth_buffer->type);
@@ -1912,6 +1936,11 @@ void RenderAFrame(int pDepth_mask_on) {
     br_vector3 pos;
     char the_text[256];
     tCar_spec* car;
+    int wide;
+    br_pixelmap* normal_render_screen = NULL;
+    br_pixelmap* normal_depth_buffer = NULL;
+    br_camera* camera_data = NULL;
+    br_scalar normal_aspect = 0;
 
 #ifdef DETHRACE_3DFX_PATCH
     if (gVoodoo_rush_mode >= 1) {
@@ -1923,6 +1952,23 @@ void RenderAFrame(int pDepth_mask_on) {
     old_pixels = gRender_screen->pixels;
     cockpit_on = gProgram_state.cockpit_on && gProgram_state.cockpit_image_index >= 0 && !gMap_mode;
     gMirror_on__graphics = gProgram_state.mirror_on && cockpit_on && gProgram_state.which_view == eView_forward;
+
+    // dethrace: widescreen. Render the 3D scene full height and wider than the screen
+    // (not for cockpit or map views); the 2D overlays below still go on gBack_screen.
+    // The shrunken-view setting (gRender_indent) is ignored: the full frame is replaced.
+    wide = gWide_render_screen != NULL
+        && !cockpit_on
+        && !gMap_mode;
+    gWide_frame_ready = 0;
+    if (wide) {
+        normal_render_screen = gRender_screen;
+        normal_depth_buffer = gDepth_buffer;
+        camera_data = gCamera->type_data;
+        normal_aspect = camera_data->aspect;
+        gRender_screen = gWide_render_screen;
+        gDepth_buffer = gWide_depth_buffer;
+        camera_data->aspect = (br_scalar)gWide_render_screen->width / gWide_render_screen->height;
+    }
     if (gMap_mode) {
         real_origin_x = gBack_screen->origin_x;
         real_origin_y = gBack_screen->origin_y;
@@ -2085,6 +2131,24 @@ void RenderAFrame(int pDepth_mask_on) {
 #endif
 
     BrMatrix34Copy(&gCamera->t.t.mat, &old_camera_matrix);
+
+    if (wide) {
+        // The middle of the wide view is the normal frame the HUD gets drawn on
+        BrPixelmapRectangleCopy(
+            gBack_screen,
+            -gBack_screen->origin_x,
+            -gBack_screen->origin_y,
+            gWide_render_screen,
+            (gWide_render_screen->width - gBack_screen->width) / 2 - gWide_render_screen->origin_x,
+            -gWide_render_screen->origin_y,
+            gBack_screen->width,
+            gBack_screen->height);
+        gRender_screen = normal_render_screen;
+        gDepth_buffer = normal_depth_buffer;
+        camera_data->aspect = normal_aspect;
+        gWide_frame_ready = 1;
+    }
+
 #ifdef DETHRACE_3DFX_PATCH
     if (cockpit_on) {
         PDUnlockRealBackScreen(1);

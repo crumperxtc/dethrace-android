@@ -1,0 +1,9 @@
+# Build output (includes the bundled game data and the APK; never commit those)
+build/
+app/build/
+app/.cxx/
+.gradle/
+build.log
+
+# Machine-specific SDK path
+local.properties
