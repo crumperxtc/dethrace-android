@@ -1,3 +1,18 @@
+# Carmageddon for Android
+
+This fork adds an Android version of dethrace: touch controls, widescreen
+races, and Carmageddon and the Splat Pack side by side. You need your own copy
+of the game files.
+
+![A race in widescreen with the touch controls](android/docs/race.jpg)
+
+- **[Download the APK (v1.0)](https://github.com/crumperxtc/dethrace-android/releases/latest)**
+- **[Install guide, controls and building it yourself](android/README.md)**
+
+The original dethrace README follows.
+
+---
+
 # Dethrace
 
 [![Workflow](https://github.com/dethrace-labs/dethrace/actions/workflows/workflow.yaml/badge.svg)](https://github.com/dethrace-labs/dethrace/actions/workflows/workflow.yml)
