@@ -13,10 +13,9 @@ CD, GOG or Steam).
 *A race on a 20:9 phone: the 3D view fills the width, the HUD stays in the
 middle, and the controls sit either side of it.*
 
-![The setup screen asking for the game files](docs/setup.jpg)
+![The start screen with Play buttons for Carmageddon and the Splat Pack](docs/start.jpg)
 
-*Adding game files: pick your Carmageddon or Splat Pack folder, or a ZIP of
-it.*
+*The start screen: play either game, or add game files from a folder or ZIP.*
 
 ## What you get
 
