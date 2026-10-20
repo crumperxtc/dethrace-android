@@ -19,36 +19,53 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Launcher. Starts the game straight away when game data is available (bundled
- * in the APK, or imported earlier); otherwise asks the player to pick their
- * Carmageddon folder or a ZIP of it, and copies DATA and MUSIC into the app's
- * files directory, where android_main.c points dethrace.
+ * Launcher and game menu. Each game (Carmageddon, Splat Pack) lives in its own
+ * folder under the app's files directory. The player adds game files by
+ * picking a folder or ZIP; the game is recognised from its data and DATA and
+ * MUSIC are copied into that game's folder. Play starts CarmageddonActivity
+ * with the folder, which android_main.c points dethrace at.
  */
 public class SetupActivity extends Activity {
+    static final String EXTRA_GAME = "game";
+
     private static final int PICK_FOLDER = 1;
     private static final int PICK_ZIP = 2;
 
+    private static final String[] GAME_IDS = { "carmageddon", "splatpack" };
+    private static final String[] GAME_NAMES = { "Carmageddon", "Splat Pack" };
+
+    private File root;
+    private LinearLayout gameList;
     private TextView status;
     private ProgressBar progress;
     private Button folderButton;
     private Button zipButton;
-    private File root;
     private int copied;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        root = getExternalFilesDir(null);
-        if (hasBundledData() || hasImportedData()) {
-            startGame();
+        // The game can't be restarted in the same process; go back to it
+        if (CarmageddonActivity.running) {
+            startActivity(new Intent(this, CarmageddonActivity.class));
+            finish();
             return;
         }
+        root = getExternalFilesDir(null);
+        migrateSingleGameLayout();
         buildUi();
+        refreshGames();
+    }
+
+    static File gameDir(File root, String id) {
+        return new File(root, id);
     }
 
     private boolean hasBundledData() {
@@ -60,17 +77,49 @@ public class SetupActivity extends Activity {
         }
     }
 
-    private boolean hasImportedData() {
-        return root != null && new File(root, "DATA/GENERAL.TXT").exists();
+    /** Bundled data is always the base game (built from -PgameDir). */
+    private boolean isInstalled(String id) {
+        return new File(gameDir(root, id), "DATA/GENERAL.TXT").exists()
+            || (id.equals("carmageddon") && hasBundledData());
     }
 
-    private void startGame() {
-        startActivity(new Intent(this, CarmageddonActivity.class));
+    /**
+     * Earlier versions kept one game directly in the files directory. Move it
+     * (saves included) into its game folder. Renames on the same filesystem,
+     * so this is instant.
+     */
+    private void migrateSingleGameLayout() {
+        if (root == null || !new File(root, "DATA").isDirectory()) {
+            return;
+        }
+        File dest = gameDir(root, isSplatPack(new File(root, "DATA")) ? "splatpack" : "carmageddon");
+        if (dest.exists()) {
+            return;
+        }
+        dest.mkdirs();
+        for (String name : new String[] { "DATA", "MUSIC", "filelist.txt" }) {
+            File from = new File(root, name);
+            if (from.exists()) {
+                from.renameTo(new File(dest, name));
+            }
+        }
+    }
+
+    private static boolean isSplatPack(File dataDir) {
+        return new File(dataDir, "RACES/CASTLE.TXT").exists();
+    }
+
+    private void play(String id) {
+        Intent intent = new Intent(this, CarmageddonActivity.class);
+        intent.putExtra(EXTRA_GAME, id);
+        startActivity(intent);
         finish();
     }
 
+    // ---- UI ----
+
     private void buildUi() {
-        int pad = Math.round(24 * getResources().getDisplayMetrics().density);
+        int pad = Math.round(16 * getResources().getDisplayMetrics().density);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
@@ -84,21 +133,26 @@ public class SetupActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
 
+        gameList = new LinearLayout(this);
+        gameList.setOrientation(LinearLayout.HORIZONTAL);
+        gameList.setGravity(Gravity.CENTER);
+        gameList.setPadding(0, pad, 0, pad);
+        layout.addView(gameList);
+
         TextView info = new TextView(this);
-        info.setText("This app needs your own copy of Carmageddon's game files.\n\n"
-            + "Copy your Carmageddon folder (the one containing DATA, and MUSIC if you have it) "
-            + "to this phone, or a ZIP of it, then choose it below. The files are copied into "
-            + "the app; you can delete your copy afterwards.");
-        info.setTextColor(0xFFDDDDDD);
-        info.setTextSize(16);
+        info.setText("To add a game, copy your Carmageddon or Splat Pack folder (the one containing DATA, "
+            + "and MUSIC if you have it) to this phone, or a ZIP of it, and choose it below. "
+            + "The game is recognised automatically. You can delete your copy afterwards.");
+        info.setTextColor(0xFFBBBBBB);
+        info.setTextSize(14);
         info.setGravity(Gravity.CENTER);
-        info.setPadding(0, pad / 2, 0, pad);
         layout.addView(info);
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setGravity(Gravity.CENTER);
+        buttons.setPadding(0, pad / 2, 0, 0);
         folderButton = new Button(this);
-        folderButton.setText("Choose folder");
+        folderButton.setText("Add from folder");
         folderButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -107,7 +161,7 @@ public class SetupActivity extends Activity {
         });
         buttons.addView(folderButton);
         zipButton = new Button(this);
-        zipButton.setText("Choose ZIP");
+        zipButton.setText("Add from ZIP");
         zipButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -128,10 +182,33 @@ public class SetupActivity extends Activity {
         status = new TextView(this);
         status.setTextColor(0xFFDDDDDD);
         status.setGravity(Gravity.CENTER);
-        status.setPadding(0, pad / 2, 0, 0);
         layout.addView(status);
 
         setContentView(layout);
+    }
+
+    /** One Play button per game; greyed out until its files are added. */
+    private void refreshGames() {
+        gameList.removeAllViews();
+        int margin = Math.round(8 * getResources().getDisplayMetrics().density);
+        for (int i = 0; i < GAME_IDS.length; i++) {
+            final String id = GAME_IDS[i];
+            boolean installed = isInstalled(id);
+            Button play = new Button(this);
+            play.setText(installed ? "Play " + GAME_NAMES[i] : GAME_NAMES[i] + "\n(not added)");
+            play.setTextSize(18);
+            play.setEnabled(installed);
+            play.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    play(id);
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(margin, 0, margin, 0);
+            gameList.addView(play, lp);
+        }
     }
 
     @Override
@@ -146,22 +223,19 @@ public class SetupActivity extends Activity {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                String error;
+                String message;
                 try {
                     copied = 0;
-                    error = zip ? importZip(uri) : importFolder(uri);
+                    message = zip ? importZip(uri) : importFolder(uri);
                 } catch (IOException | RuntimeException e) {
-                    error = "Copy failed: " + e.getMessage();
+                    message = "Copy failed: " + e.getMessage();
                 }
-                final String result = error;
+                final String result = message;
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        if (result == null && hasImportedData()) {
-                            startGame();
-                        } else {
-                            setBusy(false, result != null ? result : "No DATA/GENERAL.TXT found in what you chose.");
-                        }
+                        setBusy(false, result);
+                        refreshGames();
                     }
                 });
             }
@@ -172,6 +246,9 @@ public class SetupActivity extends Activity {
         progress.setVisibility(busy ? View.VISIBLE : View.GONE);
         folderButton.setEnabled(!busy);
         zipButton.setEnabled(!busy);
+        for (int i = 0; i < gameList.getChildCount(); i++) {
+            gameList.getChildAt(i).setEnabled(!busy && isInstalled(GAME_IDS[i]));
+        }
         status.setText(message);
     }
 
@@ -187,6 +264,10 @@ public class SetupActivity extends Activity {
         }
     }
 
+    private static String addedMessage(boolean splat) {
+        return (splat ? "Splat Pack" : "Carmageddon") + " added.";
+    }
+
     // ---- Folder import (Storage Access Framework) ----
 
     private String importFolder(Uri tree) throws IOException {
@@ -197,32 +278,30 @@ public class SetupActivity extends Activity {
         if (gameId == null) {
             return "Couldn't find a DATA folder with GENERAL.TXT in the folder you chose.";
         }
+        String[] dataDir = findChild(resolver, tree, gameId, "DATA");
+        String[] races = findChild(resolver, tree, dataDir[0], "RACES");
+        boolean splat = races != null && findChild(resolver, tree, races[0], "CASTLE.TXT") != null;
+        File dest = gameDir(root, splat ? "splatpack" : "carmageddon");
+
         for (String[] child : listChildren(resolver, tree, gameId)) {
             String top = topLevelName(child[1]);
             if (top != null && DocumentsContract.Document.MIME_TYPE_DIR.equals(child[2])) {
-                copyTree(resolver, tree, child[0], new File(root, top), top.equals("DATA"));
+                copyTree(resolver, tree, child[0], new File(dest, top), top.equals("DATA"), dest);
             }
         }
-        return null;
+        return addedMessage(splat);
     }
 
     /** Returns the document id of the folder that contains DATA/GENERAL.TXT. */
     private String findGameFolder(ContentResolver resolver, Uri tree, String id, int depth) {
-        for (String[] child : listChildren(resolver, tree, id)) {
-            if (child[1].equalsIgnoreCase("GENERAL.TXT")) {
-                // Picked DATA itself: the game folder is its parent, which we
-                // can't reach, so treat this folder as DATA
-                return "DATA:" + id;
-            }
+        if (findChild(resolver, tree, id, "GENERAL.TXT") != null) {
+            // Picked DATA itself: the game folder is its parent, which we
+            // can't reach, so treat this folder as DATA
+            return "DATA:" + id;
         }
-        for (String[] child : listChildren(resolver, tree, id)) {
-            if (child[1].equalsIgnoreCase("DATA") && DocumentsContract.Document.MIME_TYPE_DIR.equals(child[2])) {
-                for (String[] grandchild : listChildren(resolver, tree, child[0])) {
-                    if (grandchild[1].equalsIgnoreCase("GENERAL.TXT")) {
-                        return id;
-                    }
-                }
-            }
+        String[] data = findChild(resolver, tree, id, "DATA");
+        if (data != null && findChild(resolver, tree, data[0], "GENERAL.TXT") != null) {
+            return id;
         }
         if (depth > 0) {
             for (String[] child : listChildren(resolver, tree, id)) {
@@ -237,9 +316,18 @@ public class SetupActivity extends Activity {
         return null;
     }
 
+    private String[] findChild(ContentResolver resolver, Uri tree, String id, String name) {
+        for (String[] child : listChildren(resolver, tree, id)) {
+            if (child[1].equalsIgnoreCase(name)) {
+                return child;
+            }
+        }
+        return null;
+    }
+
     /** Children as {documentId, name, mimeType}. */
-    private java.util.List<String[]> listChildren(ContentResolver resolver, Uri tree, String id) {
-        java.util.List<String[]> children = new java.util.ArrayList<>();
+    private List<String[]> listChildren(ContentResolver resolver, Uri tree, String id) {
+        List<String[]> children = new ArrayList<>();
         if (id.startsWith("DATA:")) {
             // Picked DATA directly: present it as a game folder containing DATA
             children.add(new String[] { id.substring(5), "DATA", DocumentsContract.Document.MIME_TYPE_DIR });
@@ -262,15 +350,15 @@ public class SetupActivity extends Activity {
         return children;
     }
 
-    private void copyTree(ContentResolver resolver, Uri tree, String id, File dest, boolean upperCase) throws IOException {
+    private void copyTree(ContentResolver resolver, Uri tree, String id, File dest, boolean upperCase, File game) throws IOException {
         if (!dest.isDirectory() && !dest.mkdirs()) {
             throw new IOException("can't create " + dest);
         }
         for (String[] child : listChildren(resolver, tree, id)) {
             File target = new File(dest, upperCase ? child[1].toUpperCase(Locale.ROOT) : child[1]);
             if (DocumentsContract.Document.MIME_TYPE_DIR.equals(child[2])) {
-                copyTree(resolver, tree, child[0], target, upperCase);
-            } else if (!isPlayerFile(target)) {
+                copyTree(resolver, tree, child[0], target, upperCase, game);
+            } else if (!isPlayerFile(game, target)) {
                 InputStream in = resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, child[0]));
                 try {
                     writeFile(in, target);
@@ -284,24 +372,35 @@ public class SetupActivity extends Activity {
     // ---- ZIP import ----
 
     private String importZip(Uri uri) throws IOException {
-        // Find where DATA sits inside the zip (it may be inside a top folder)
+        // Find where DATA sits inside the zip (it may be inside a top folder),
+        // and whether it's the Splat Pack
         String prefix = null;
+        boolean splat = false;
+        List<String> names = new ArrayList<>();
         ZipInputStream zip = new ZipInputStream(getContentResolver().openInputStream(uri));
         try {
             for (ZipEntry e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
-                String name = e.getName().replace('\\', '/');
-                String upper = name.toUpperCase(Locale.ROOT);
-                if (upper.endsWith("DATA/GENERAL.TXT")) {
-                    prefix = name.substring(0, name.length() - "DATA/GENERAL.TXT".length());
-                    break;
-                }
+                names.add(e.getName().replace('\\', '/'));
             }
         } finally {
             zip.close();
         }
+        for (String name : names) {
+            if (name.toUpperCase(Locale.ROOT).endsWith("DATA/GENERAL.TXT")) {
+                prefix = name.substring(0, name.length() - "DATA/GENERAL.TXT".length());
+                break;
+            }
+        }
         if (prefix == null) {
             return "Couldn't find DATA/GENERAL.TXT in the ZIP.";
         }
+        String castle = (prefix + "DATA/RACES/CASTLE.TXT").toUpperCase(Locale.ROOT);
+        for (String name : names) {
+            if (name.toUpperCase(Locale.ROOT).equals(castle)) {
+                splat = true;
+            }
+        }
+        File dest = gameDir(root, splat ? "splatpack" : "carmageddon");
 
         zip = new ZipInputStream(getContentResolver().openInputStream(uri));
         try {
@@ -317,8 +416,8 @@ public class SetupActivity extends Activity {
                     continue;
                 }
                 String rest = relative.substring(slash);
-                File target = new File(root, top + (top.equals("DATA") ? rest.toUpperCase(Locale.ROOT) : rest));
-                if (isPlayerFile(target)) {
+                File target = new File(dest, top + (top.equals("DATA") ? rest.toUpperCase(Locale.ROOT) : rest));
+                if (isPlayerFile(dest, target)) {
                     continue;
                 }
                 File parent = target.getParentFile();
@@ -330,7 +429,7 @@ public class SetupActivity extends Activity {
         } finally {
             zip.close();
         }
-        return null;
+        return addedMessage(splat);
     }
 
     // ---- Helpers ----
@@ -351,8 +450,8 @@ public class SetupActivity extends Activity {
     }
 
     /** Saves and settings the game writes; keep the player's existing copies. */
-    private boolean isPlayerFile(File target) {
-        String path = target.getAbsolutePath().substring(root.getAbsolutePath().length()).toUpperCase(Locale.ROOT);
+    private static boolean isPlayerFile(File game, File target) {
+        String path = target.getAbsolutePath().substring(game.getAbsolutePath().length()).toUpperCase(Locale.ROOT);
         return target.exists()
             && (path.startsWith("/DATA/SAVEGAME/") || path.equals("/DATA/OPTIONS.TXT") || path.startsWith("/DATA/KEYMAP"));
     }

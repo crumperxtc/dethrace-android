@@ -15,7 +15,7 @@ middle, and the controls sit either side of it.*
 
 ![The setup screen asking for the game files](docs/setup.jpg)
 
-*First launch of the ready-made APK: pick your Carmageddon folder or a ZIP of
+*Adding game files: pick your Carmageddon or Splat Pack folder, or a ZIP of
 it.*
 
 ## What you get
@@ -37,9 +37,14 @@ it.*
 2. Copy your Carmageddon folder (the one containing `DATA`, see
    [Game files](#1-get-the-game-files)) to the phone, for example into
    `Download`. A ZIP of the folder works too and is easier to copy as one file.
-3. Open the app, tap **Choose folder** (or **Choose ZIP**) and pick what you
-   copied. The app copies `DATA` and `MUSIC` into its own storage, which takes
-   a minute, and then starts the game. You can delete your copy afterwards.
+3. Open the app, tap **Add from folder** (or **Add from ZIP**) and pick what
+   you copied. The app recognises whether it's Carmageddon or the Splat Pack
+   and copies `DATA` and `MUSIC` into its own storage, which takes a minute.
+   You can delete your copy afterwards.
+4. Tap **Play Carmageddon** (or **Play Splat Pack**).
+
+Have both? Add each one the same way. They're kept separately, each with its
+own saves, and the start screen has a Play button for each.
 
 The ready-made APK contains no game files, so it's fine to share. That's all;
 the rest of this page is for building it yourself.
@@ -63,9 +68,9 @@ carmageddon/
   audio tracks, so rip tracks 2-8 to OGG and name them `Track02.ogg`,
   `Track03.ogg` and so on, in a `MUSIC` folder. If you skip this, the game just
   has no music.
-- **Splat Pack (untested):** dethrace detects the Splat Pack from its `DATA`
-  folder, so pointing the build at the Splat Pack folder should work. It
-  hasn't been tried on Android yet.
+- **Splat Pack:** same layout. Add it from the app's start screen; it's
+  recognised by its races (`DATA/RACES/CASTLE.TXT`) and kept separately from
+  the base game. Builds with packed-in data only pack the base game.
 
 ### 2. Install the build tools (Windows)
 
@@ -150,14 +155,17 @@ To update, install a newer APK over the old one. Saves and settings are kept.
 
 ### 6. First launch
 
-With the data packed in, the screen stays **black for 10-30 seconds** the first
-time while the game data is unpacked to the phone's storage. Don't close the
-app during this. Later launches start straight away. Allow about 650 MB of free
-space (the APK plus the unpacked copy). Without packed data, you get the setup
-screen from [Quick install](#quick-install-ready-made-apk) instead.
+The app opens on the start screen. With the data packed in, **Play
+Carmageddon** is ready straight away; the first time you press it, the screen
+stays **black for 10-30 seconds** while the game data is unpacked to the
+phone's storage. Don't close the app during this. Allow about 650 MB of free
+space (the APK plus the unpacked copy). Without packed data, add the game files
+as in [Quick install](#quick-install-ready-made-apk).
 
-The unpacked files and your save games live in
-`Android/data/org.dethrace.carmageddon/files/`.
+Each game's files and save games live in
+`Android/data/org.dethrace.carmageddon/files/carmageddon/` and
+`.../files/splatpack/`. If you leave the app while playing, tapping its icon
+takes you back into the game.
 
 ## Controls
 
@@ -183,12 +191,13 @@ game's options, the on-screen buttons stop matching.
 
 ## Troubleshooting
 
-- **Setup screen says it can't find DATA/GENERAL.TXT**: pick the folder that
+- **Start screen says it can't find DATA/GENERAL.TXT**: pick the folder that
   contains `DATA` (or `DATA` itself, or a ZIP with `DATA` inside). Picking the
   folder above it also works.
 - **"Game data not found"** when the game starts: the imported files are
-  incomplete. Clear the app's storage in Android's app settings and import
-  again.
+  incomplete. Add the game again from the start screen; your saves are kept.
+- **To switch games**, quit the one you're playing from its main menu, then
+  open the app again and pick the other one.
 - **"Couldn't unpack the game data"**: free up space on the phone and start
   the app again.
 - **Build fails with "No Carmageddon DATA folder"**: `-PgameDir` must point at

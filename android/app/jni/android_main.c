@@ -1,7 +1,7 @@
 // Android entry point: SDLActivity loads libmain.so and calls SDL_main.
-// Unpacks the game data bundled in the APK (assets/game) to the app's
-// external files directory, points dethrace at it and forwards
-// stdout/stderr to logcat.
+// Runs the game in the folder SetupActivity chose (one per game, under the
+// app's external files directory), unpacking the game data bundled in the
+// APK (assets/game) there first if asked, and forwards stdout/stderr to logcat.
 
 #include <android/log.h>
 #include <errno.h>
@@ -129,7 +129,7 @@ static int extract_game_data(const char* root) {
 
     list = read_all("game/filelist.txt");
     if (list == NULL) {
-        // APK built without game data; expect it to be copied over by hand
+        // APK built without game data; SetupActivity imports it instead
         return 1;
     }
     snprintf(marker, sizeof(marker), "%s/filelist.txt", root);
@@ -170,53 +170,56 @@ static int extract_game_data(const char* root) {
 }
 
 int SDL_main(int argc, char* argv[]) {
-    const char* root;
+    // Defaults; CarmageddonActivity.getArguments() passes all three
+    const char* game_dir = NULL;
+    int unpack_bundled = 0;
+    char widescreen_arg[32] = "--widescreen=640";
+    char default_dir[1024];
     char message[1024];
-    char widescreen_arg[32];
     // -hires: original 640x480 mode (DATA/64X48X8)
     char* args[] = { "dethrace", "--no-signal-handler", "-hires", widescreen_arg, NULL };
-    SDL_DisplayMode mode;
-    int width = 640;
+    int i;
 
     redirect_output_to_logcat();
 
-    // /storage/emulated/0/Android/data/<package>/files
-    root = SDL_AndroidGetExternalStoragePath();
-    if (root == NULL) {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Carmageddon", SDL_GetError(), NULL);
-        return 1;
+    for (i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "--game-dir=", 11) == 0) {
+            game_dir = argv[i] + 11;
+        } else if (strcmp(argv[i], "--unpack-bundled") == 0) {
+            unpack_bundled = 1;
+        } else if (strncmp(argv[i], "--widescreen=", 13) == 0) {
+            snprintf(widescreen_arg, sizeof(widescreen_arg), "%s", argv[i]);
+        }
     }
-    setenv("DETHRACE_ROOT_DIR", root, 1);
-    chdir(root);
+    if (game_dir == NULL) {
+        // /storage/emulated/0/Android/data/<package>/files/carmageddon
+        if (SDL_AndroidGetExternalStoragePath() == NULL) {
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Carmageddon", SDL_GetError(), NULL);
+            return 1;
+        }
+        snprintf(default_dir, sizeof(default_dir), "%s/carmageddon", SDL_AndroidGetExternalStoragePath());
+        game_dir = default_dir;
+    }
+    mkdir(game_dir, 0755);
+    setenv("DETHRACE_ROOT_DIR", game_dir, 1);
+    chdir(game_dir);
 
-    if (!extract_game_data(root)) {
+    if (unpack_bundled && !extract_game_data(game_dir)) {
         snprintf(message, sizeof(message),
             "Couldn't unpack the game data to:\n\n%s\n\nCheck there is about 350 MB of free space.",
-            root);
+            game_dir);
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Carmageddon", message, NULL);
         return 1;
     }
 
     if (access("DATA/GENERAL.TXT", F_OK) != 0) {
         snprintf(message, sizeof(message),
-            "Game data not found.\n\nCopy the contents of your Carmageddon folder "
-            "(CARMA.EXE, DATA, MUSIC) to:\n\n%s",
-            root);
+            "Game data not found in:\n\n%s\n\nAdd the game again from the start screen.",
+            game_dir);
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Carmageddon", message, NULL);
         return 1;
     }
 
-    // Widescreen: CarmageddonActivity.getArguments() passes --widescreen=<width>
-    // from the real display size; fall back to asking SDL
-    if (argc > 1 && strncmp(argv[1], "--widescreen=", 13) == 0) {
-        snprintf(widescreen_arg, sizeof(widescreen_arg), "%s", argv[1]);
-    } else {
-        if (SDL_Init(SDL_INIT_VIDEO) == 0 && SDL_GetDesktopDisplayMode(0, &mode) == 0 && SDL_min(mode.w, mode.h) > 0) {
-            width = SDL_clamp(480 * SDL_max(mode.w, mode.h) / SDL_min(mode.w, mode.h), 640, 1280);
-        }
-        snprintf(widescreen_arg, sizeof(widescreen_arg), "--widescreen=%d", width);
-    }
-    printf("Using %s\n", widescreen_arg);
-
+    printf("Game folder %s, %s\n", game_dir, widescreen_arg);
     return dethrace_main(SDL_arraysize(args) - 1, args);
 }

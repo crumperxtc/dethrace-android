@@ -15,8 +15,12 @@ import org.libsdl.app.SDLActivity;
  */
 public class CarmageddonActivity extends SDLActivity {
 
+    // True while the game is running in this process (SDL can't start it twice)
+    static boolean running;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        running = true;
         super.onCreate(savedInstanceState);
         if (mLayout != null) {
             mLayout.addView(createControls(), new RelativeLayout.LayoutParams(
@@ -24,10 +28,36 @@ public class CarmageddonActivity extends SDLActivity {
         }
     }
 
-    // Passed to SDL_main. The widescreen width comes from the real display size,
-    // which native code can't rely on this early.
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        running = false;
+        if (isFinishing()) {
+            // dethrace keeps its state in globals and only expects to start once,
+            // so end the process; the next Play starts from a clean slate
+            System.exit(0);
+        }
+    }
+
+    // Passed to SDL_main (android_main.c): the chosen game's folder, whether to
+    // unpack the game data built into the APK there, and the widescreen width.
+    // The width comes from the real display size, which native code can't rely
+    // on this early.
     @Override
     protected String[] getArguments() {
+        String game = getIntent().getStringExtra(SetupActivity.EXTRA_GAME);
+        if (game == null) {
+            game = "carmageddon";
+        }
+        boolean bundled = false;
+        try {
+            getAssets().open("game/filelist.txt").close();
+            bundled = game.equals("carmageddon");
+        } catch (java.io.IOException e) {
+            // No game data in the APK
+        }
+        String gameDir = SetupActivity.gameDir(getExternalFilesDir(null), game).getAbsolutePath();
+
         android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
         getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
         int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
@@ -36,7 +66,11 @@ public class CarmageddonActivity extends SDLActivity {
         if (shortSide > 0) {
             width = Math.max(640, Math.min(1280, 480 * longSide / shortSide)) & ~7;
         }
-        return new String[] { "--widescreen=" + width };
+        return new String[] {
+            "--game-dir=" + gameDir,
+            bundled ? "--unpack-bundled" : "--no-unpack",
+            "--widescreen=" + width,
+        };
     }
 
     // Phone back button acts as Escape (pause menu / back out of menus)
